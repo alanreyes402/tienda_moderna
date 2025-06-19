@@ -1,13 +1,16 @@
-import mysql from 'mysql2/promise';
+import sql from 'mssql';
 
-const pool = mysql.createPool({
-  host: 'localhost',        
-  user: 'TU_USUARIO',
-  password: 'TU_CONTRASEÑA',
-  database: 'NOMBRE_BASE',
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0
-});
+const config = {
+  user: 'moderna_user',
+  password: 'tienda123',
+  server: 'localhost',
+  database: 'LaModerna',
+  options: {
+    encrypt: false,                // No usamos SSL
+    trustServerCertificate: true  // Necesario en entorno local
+  },
+  port: 1433                      // Puerto por defecto de SQL Server
+};
 
+const pool = await sql.connect(config);
 export default pool;
