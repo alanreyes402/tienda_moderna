@@ -1,12 +1,11 @@
 /**
  * TIENDA_MODERNA/src/Routes/cortes.js
- * * Descripción:
+ * Descripción:
  * Contiene la ruta para realizar la operación de corte de caja diario.
  */
 
 import express from 'express';
-import sql from 'mssql';
-import db from '../BD/MySQL.js';
+import { sql, pool } from '../BD/MySQL.js'; // ← CORREGIDO
 
 const router = express.Router();
 
@@ -26,14 +25,12 @@ router.post('/', async (req, res) => {
   }
 
   try {
-    const request = db.request();
+    const request = await pool.then(p => p.request()); // ← CORREGIDO
     request.input('nombre_corte', sql.VarChar(50), nombre_corte);
 
     const result = await request.execute('sp_realizar_corte_diario');
-    
-    // El SP devuelve un recordset con el resultado, lo enviamos como confirmación.
     res.status(201).json(result.recordset[0]);
-
+    
   } catch (error) {
     console.error('Error al realizar el corte de caja:', error);
     res.status(500).json({ error: 'Error interno al realizar el corte.' });

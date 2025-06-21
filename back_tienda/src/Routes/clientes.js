@@ -1,22 +1,12 @@
-/**
- * TIENDA_MODERNA/src/Routes/clientes.js
- * * Descripción:
- * Este archivo contiene las rutas de la API para la gestión de los clientes.
- * Proporciona endpoints para las operaciones CRUD (Crear, Leer, Actualizar, Borrar) 
- * sobre la tabla 'clientes'.
- */
-
 import express from 'express';
-import sql from 'mssql';
-import db from '../BD/MySQL.js';
+import { sql, pool } from '../BD/MySQL.js';
 
 const router = express.Router();
 
 // --- 1. OBTENER TODOS LOS CLIENTES ---
-// GET /api/clientes
 router.get('/', async (req, res) => {
   try {
-    const request = db.request();
+    const request = await pool.then(p => p.request());
     const result = await request.query('SELECT * FROM clientes ORDER BY nombre_cli ASC');
     res.json(result.recordset);
   } catch (error) {
@@ -26,11 +16,10 @@ router.get('/', async (req, res) => {
 });
 
 // --- 2. OBTENER UN CLIENTE POR SU ID ---
-// GET /api/clientes/:id
 router.get('/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    const request = db.request();
+    const request = await pool.then(p => p.request());
     request.input('id', sql.SmallInt, id);
     const result = await request.query('SELECT * FROM clientes WHERE id_cli = @id');
     
@@ -46,7 +35,6 @@ router.get('/:id', async (req, res) => {
 });
 
 // --- 3. CREAR UN NUEVO CLIENTE ---
-// POST /api/clientes
 router.post('/', async (req, res) => {
   const { nombre_cli, Numero_cli, dir_cli } = req.body;
 
@@ -55,7 +43,7 @@ router.post('/', async (req, res) => {
   }
 
   try {
-    const request = db.request();
+    const request = await pool.then(p => p.request());
     request.input('nombre_cli', sql.VarChar(100), nombre_cli);
     request.input('Numero_cli', sql.VarChar(100), Numero_cli);
     request.input('dir_cli', sql.VarChar(100), dir_cli);
@@ -72,7 +60,6 @@ router.post('/', async (req, res) => {
 });
 
 // --- 4. ACTUALIZAR UN CLIENTE EXISTENTE ---
-// PUT /api/clientes/:id
 router.put('/:id', async (req, res) => {
   const { id } = req.params;
   const { nombre_cli, Numero_cli, dir_cli } = req.body;
@@ -82,7 +69,7 @@ router.put('/:id', async (req, res) => {
   }
   
   try {
-    const request = db.request();
+    const request = await pool.then(p => p.request());
     request.input('id', sql.SmallInt, id);
     request.input('nombre_cli', sql.VarChar(100), nombre_cli);
     request.input('Numero_cli', sql.VarChar(100), Numero_cli);
@@ -104,12 +91,25 @@ router.put('/:id', async (req, res) => {
 });
 
 // --- 5. BORRAR UN CLIENTE ---
-// DELETE /api/clientes/:id
 router.delete('/:id', async (req, res) => {
   const { id } = req.params;
 
   try {
-    const request = db.request();
+    // Paso 1: Verificar si el cliente tiene ventas asociadas
+    const checkRequest = await pool.then(p => p.request());
+    checkRequest.input('id_cli', sql.SmallInt, id);
+    const check = await checkRequest.query(`
+      SELECT COUNT(*) AS cantidad FROM ventas WHERE id_cli_venta = @id_cli
+    `);
+
+    if (check.recordset[0].cantidad > 0) {
+      return res.status(409).json({
+        error: 'No se puede eliminar el cliente porque está asociado a una o más ventas.'
+      });
+    }
+
+    // Paso 2: Eliminar el cliente si no hay conflictos
+    const request = await pool.then(p => p.request());
     request.input('id', sql.SmallInt, id);
 
     const result = await request.query('DELETE FROM clientes WHERE id_cli = @id');
@@ -120,11 +120,10 @@ router.delete('/:id', async (req, res) => {
       res.status(404).json({ error: 'Cliente no encontrado para eliminar.' });
     }
   } catch (error) {
-    // La FK en la tabla 'ventas' puede causar este error
-    console.error(`Error al borrar el cliente con ID ${id}:`, error);
+    console.error(`❌ Error al borrar el cliente con ID ${id}:`, error.message);
     res.status(500).json({ 
       error: 'Error interno al borrar el cliente.',
-      message: 'Es posible que este cliente esté asignado a una o más ventas y no pueda ser eliminado.'
+      message: 'Es posible que esté vinculado con otras entidades.'
     });
   }
 });
