@@ -1,39 +1,34 @@
-/**
- * TIENDA_MODERNA/src/Routes/cortes.js
- * Descripción:
- * Contiene la ruta para realizar la operación de corte de caja diario.
- */
-
 import express from 'express';
-import { sql, pool } from '../BD/MySQL.js'; // ← CORREGIDO
+import { sql, pool } from '../BD/MySQL.js';
 
 const router = express.Router();
 
-// --- REALIZAR CORTE DE CAJA ---
-/**
- * @route   POST /api/cortes
- * @desc    Registra un nuevo corte de caja en la bitácora.
- * @access  Public
- * @body    { "nombre_corte": "NombreDelCajero" }
- * @uses    SP: sp_realizar_corte_diario
- */
-router.post('/', async (req, res) => {
-  const { nombre_corte } = req.body;
+router.post('/cortes', async (req, res) => {
+  const { fecha_desde, fecha_hasta } = req.body;
 
-  if (!nombre_corte) {
-    return res.status(400).json({ error: 'El nombre de quien realiza el corte es requerido.' });
+  if (!fecha_desde || !fecha_hasta) {
+    return res.status(400).json({ error: 'Fechas requeridas.' });
   }
 
   try {
-    const request = await pool.then(p => p.request()); // ← CORREGIDO
-    request.input('nombre_corte', sql.VarChar(50), nombre_corte);
+    const request = await pool.then(p => p.request());
+    request.input('desde', sql.Date, fecha_desde);
+    request.input('hasta', sql.Date, fecha_hasta);
 
-    const result = await request.execute('sp_realizar_corte_diario');
-    res.status(201).json(result.recordset[0]);
-    
+    const result = await request.query(`
+      SELECT id_corte, monto_corte, fecha_corte, nombre_corte
+      FROM bitacora_cortes
+      WHERE CAST(fecha_corte AS DATE) BETWEEN @desde AND @hasta
+      ORDER BY fecha_corte DESC
+    `);
+
+    const cortes = result.recordset;
+    const total_cortes = cortes.reduce((sum, c) => sum + parseFloat(c.monto_corte || 0), 0);
+
+    res.json({ cortes, total_cortes });
   } catch (error) {
-    console.error('Error al realizar el corte de caja:', error);
-    res.status(500).json({ error: 'Error interno al realizar el corte.' });
+    console.error('❌ Error al obtener cortes:', error);
+    res.status(500).json({ error: 'Error al obtener los cortes.' });
   }
 });
 
