@@ -3,12 +3,12 @@ import { sql, pool } from '../BD/MySQL.js';
 
 const router = express.Router();
 
-// Buscar productos (por ID o nombre)
+// Buscar productos (por ID o nombre que comiencen con lo escrito)
 router.get('/productos/buscar', async (req, res) => {
   const { q } = req.query;
   try {
     const request = (await pool).request();
-    request.input('query', sql.VarChar, `%${q}%`);
+    request.input('query', sql.VarChar, `${q}%`);
     const result = await request.query(`
       SELECT id_prod, nombre_prod, precio_ven_prod
       FROM productos
@@ -21,12 +21,12 @@ router.get('/productos/buscar', async (req, res) => {
   }
 });
 
-// Buscar clientes (por ID o nombre)
+// Buscar clientes (por ID o nombre que comiencen con lo escrito)
 router.get('/clientes/buscar', async (req, res) => {
   const { q } = req.query;
   try {
     const request = (await pool).request();
-    request.input('query', sql.VarChar, `%${q}%`);
+    request.input('query', sql.VarChar, `${q}%`);
     const result = await request.query(`
       SELECT id_cli, nombre_cli
       FROM clientes

@@ -3,55 +3,43 @@ import { sql, pool } from '../BD/MySQL.js';
 
 const router = express.Router();
 
-// --- RUTA GET GENERAL: productos en alerta ---
+// --- RUTA GET GENERAL: productos en alerta + conteos ---
 router.get('/', async (req, res) => {
   try {
     const connectionPool = await pool;
+
     const bajoStockPromise = connectionPool.request().query('SELECT * FROM vista_productos_bajo_stock');
     const porCaducarPromise = connectionPool.request().query('SELECT * FROM vista_productos_por_caducar');
     const caducadosPromise = connectionPool.request().query('SELECT * FROM vista_productos_caducados');
+    const conteoBajoStockPromise = connectionPool.request().query('SELECT * FROM vista_conteo_productos_bajo_stock');
+    const conteoPorCaducarPromise = connectionPool.request().query('SELECT * FROM vista_conteo_productos_por_caducar');
 
     const [
       resultadoBajoStock,
       resultadoPorCaducar,
-      resultadoCaducados
+      resultadoCaducados,
+      conteoBajoStock,
+      conteoPorCaducar
     ] = await Promise.all([
       bajoStockPromise,
       porCaducarPromise,
-      caducadosPromise
+      caducadosPromise,
+      conteoBajoStockPromise,
+      conteoPorCaducarPromise
     ]);
 
     res.json({
       bajo_stock: resultadoBajoStock.recordset,
       por_caducar: resultadoPorCaducar.recordset,
-      caducados: resultadoCaducados.recordset
+      caducados: resultadoCaducados.recordset,
+      conteos: {
+        productos_bajo_stock: conteoBajoStock.recordset[0]?.productos_bajo_stock ?? 0,
+        productos_por_caducar: conteoPorCaducar.recordset[0]?.productos_por_caducar ?? 0
+      }
     });
   } catch (error) {
-    console.error('❌ Error al obtener alertas desde las vistas:', error);
-    res.status(500).json({ error: 'Error al obtener productos en alerta.' });
-  }
-});
-
-// --- NUEVOS ENDPOINTS DE CONTEO DE ALERTAS ---
-// Conteo de productos por caducar
-router.get('/conteo/por-caducar', async (req, res) => {
-  try {
-    const result = await (await pool).request().query('SELECT * FROM vista_conteo_productos_por_caducar');
-    res.json(result.recordset[0]);
-  } catch (error) {
-    console.error('❌ Error al obtener conteo por caducar:', error);
-    res.status(500).json({ error: 'Error al obtener conteo por caducar.' });
-  }
-});
-
-// Conteo de productos con bajo stock
-router.get('/conteo/bajo-stock', async (req, res) => {
-  try {
-    const result = await (await pool).request().query('SELECT * FROM vista_conteo_productos_bajo_stock');
-    res.json(result.recordset[0]);
-  } catch (error) {
-    console.error('❌ Error al obtener conteo bajo stock:', error);
-    res.status(500).json({ error: 'Error al obtener conteo bajo stock.' });
+    console.error('❌ Error al obtener alertas y conteos:', error);
+    res.status(500).json({ error: 'Error al obtener productos en alerta y conteos.' });
   }
 });
 
