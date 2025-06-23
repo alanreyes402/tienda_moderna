@@ -2,7 +2,7 @@ import sql from 'mssql';
 
 const config = {
   user: 'moderna_user',
-  password: 'tienda123',
+  password: 'Tienda123',
   server: 'localhost',
   database: 'LaModerna',
   port: 1433,
