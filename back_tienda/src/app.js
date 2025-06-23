@@ -1,80 +1,63 @@
+const express = require('express');
+const router = express.Router();
+const { sql, pool } = require('../BD/MySQL');
 
-
-// ----------------------------------------------------------------
-// 1. IMPORTACIONES
-// ----------------------------------------------------------------
-import express from 'express';
-import db from './BD/MySQL.js'; // Ajusta la ruta si no es exacta
-
-// Importamos los enrutadores de cada módulo. Cada uno es como un "mini-API"
-// especializado en su propia área de negocio.
-import marcasRouter from './marcas/marcas.rutas.js';
-import proveedoresRouter from './proveedores/proveedores.rutas.js';
-import productosRouter from './productos/productos.rutas.js';
-import clientesRouter from './clientes/clientes.rutas.js';
-import ventasRouter from './ventas/ventas.rutas.js';
-import detalleVentasRouter from './detalleVentas/detalle_ventas.rutas.js';
-
-import bitacoraCortesRouter from './bitacoraCortes/bitacora_cortes.rutas.js';
-
-
-/////el error lo marca aca en el import de bitacora
-
-
-// ----------------------------------------------------------------
-// 2. INICIALIZACIÓN Y MIDDLEWARES GLOBALES
-// ----------------------------------------------------------------
-const app = express();
-
-// Middleware para que Express pueda interpretar bodies de peticiones en formato JSON.
-// Es crucial para las peticiones POST y PUT.
-app.use(express.json());
-
-
-// ----------------------------------------------------------------
-// 3. RUTA RAÍZ (PUNTO DE BIENVENIDA)
-// ----------------------------------------------------------------
-// Proporciona una respuesta en la raíz del API para verificar su estado.
-app.get('/', (req, res) => {
-    res.status(200).json({ 
-        message: '¡API de La Moderna funcionando correctamente! 🚀',
-        "hora_actual": new Date().toLocaleTimeString('es-MX'),
-        "fecha_actual": new Date().toLocaleDateString('es-MX'),
-    });
+// ==========================
+// 🔍 Buscar productos (ID o nombre)
+// ==========================
+router.get('/productos/buscar', async (req, res) => {
+  const { q } = req.query;
+  try {
+    const request = (await pool).request();
+    request.input('query', sql.VarChar, `%${q}%`);
+    const result = await request.query(`
+      SELECT id_prod, nombre_prod, precio_ven_prod 
+      FROM productos 
+      WHERE CAST(id_prod AS VARCHAR) LIKE @query OR nombre_prod LIKE @query
+    `);
+    res.json(result.recordset);
+  } catch (error) {
+    console.error('Error al buscar productos:', error);
+    res.status(500).json({ error: 'Error al buscar productos.' });
+  }
 });
 
+// ==========================
+// ✅ Verificar total
+// ==========================
+router.post('/verificar-total', async (req, res) => {
+  const { items, total_frontend } = req.body;
+  try {
+    const request = (await pool).request();
+    request.input('items_json', sql.NVarChar(sql.MAX), JSON.stringify(items));
+    request.input('total_frontend', sql.Decimal(10, 2), total_frontend);
 
-// ----------------------------------------------------------------
-// 4. CONEXIÓN DE LAS RUTAS DE LOS MÓDULOS
-// ----------------------------------------------------------------
-// Aquí conectamos cada enrutador a una ruta base. Esto mantiene el API
-// organizado y RESTful.
+    const result = await request.execute('sp_VerificarTotalVenta');
+    res.json(result.recordset[0]);
+  } catch (error) {
+    console.error('Error en verificación de total:', error);
+    res.status(500).json({ status: 'error', mensaje: 'Error al verificar el total' });
+  }
+});
 
-// Rutas para la gestión de Marcas
-app.use('/api/marcas', marcasRouter);
+// ==========================
+// 🧾 Insertar venta completa
+// ==========================
+router.post('/crear', async (req, res) => {
+  const { id_cli_venta, metodo_pago_venta, items, total_venta } = req.body;
+  try {
+    const request = (await pool).request();
+    request.input('id_cli_venta', sql.SmallInt, id_cli_venta || null);
+    request.input('metodo_pago_venta', sql.VarChar(10), metodo_pago_venta);
+    request.input('items_json', sql.NVarChar(sql.MAX), JSON.stringify(items));
+    request.input('total_venta', sql.Decimal(10, 2), total_venta);
 
-// Rutas para la gestión de Proveedores
-app.use('/api/proveedores', proveedoresRouter);
+    const result = await request.execute('sp_InsertarVentaCompleta');
+    res.json(result.recordset[0]);
+  } catch (error) {
+    console.error('Error al crear venta:', error);
+    res.status(500).json({ status: 'error', mensaje: 'Error interno al registrar venta' });
+  }
+});
 
-// Rutas para la gestión de Productos
-app.use('/api/productos', productosRouter);
-
-// Rutas para la gestión de Clientes
-app.use('/api/clientes', clientesRouter);
-
-// Rutas para la gestión de Ventas
-app.use('/api/ventas', ventasRouter);
-
-// Rutas para la gestión de los Detalles de Venta
-app.use('/api/detalle-ventas', detalleVentasRouter);
-
-// Rutas para la gestión de la Bitácora de Cortes
-app.use('/api/bitacora-cortes', bitacoraCortesRouter);
-
-
-// ----------------------------------------------------------------
-// 5. EXPORTACIÓN
-// ----------------------------------------------------------------
-// Exportamos la instancia de 'app' para que el archivo de entrada
-// (index.js) pueda iniciar el servidor.
-export default app;
+module.exports = router;

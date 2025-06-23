@@ -12,14 +12,14 @@ router.post('/cortes', async (req, res) => {
 
   try {
     const request = await pool.then(p => p.request());
-    request.input('desde', sql.Date, fecha_desde);
-    request.input('hasta', sql.Date, fecha_hasta);
+    request.input('desde', sql.DateTime, fecha_desde);
+    request.input('hasta', sql.DateTime, fecha_hasta); // Nota: usamos DateTime, no solo Date
 
     const result = await request.query(`
       SELECT id_corte, monto_corte, fecha_corte, nombre_corte
       FROM bitacora_cortes
-      WHERE CAST(fecha_corte AS DATE) BETWEEN @desde AND @hasta
-      ORDER BY fecha_corte DESC
+      WHERE fecha_corte BETWEEN @desde AND DATEADD(SECOND, 86399, @hasta)
+      ORDER BY fecha_corte DESC;
     `);
 
     const cortes = result.recordset;
