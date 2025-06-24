@@ -36,20 +36,17 @@ router.get('/:id', async (req, res) => {
 
 // --- 3. CREAR UN NUEVO PROVEEDOR ---
 router.post('/', async (req, res) => {
-  const { nombre_prov, Numero_prov } = req.body;
+  const proveedorJson = JSON.stringify(req.body);
 
-  if (!nombre_prov || nombre_prov.trim() === '') {
+  if (!req.body.nombre_prov || req.body.nombre_prov.trim() === '') {
     return res.status(400).json({ error: 'El campo nombre_prov es requerido.' });
   }
 
   try {
     const request = await pool.then(p => p.request());
-    request.input('nombre_prov', sql.VarChar(100), nombre_prov);
-    request.input('Numero_prov', sql.VarChar(10), Numero_prov);
+    request.input('json', sql.NVarChar(sql.MAX), proveedorJson);
 
-    const result = await request.query(
-      'INSERT INTO proveedores (nombre_prov, Numero_prov) OUTPUT Inserted.* VALUES (@nombre_prov, @Numero_prov)'
-    );
+    const result = await request.execute('sp_insertar_proveedor_json');
 
     res.status(201).json(result.recordset[0]);
   } catch (error) {
@@ -58,24 +55,22 @@ router.post('/', async (req, res) => {
   }
 });
 
+
 // --- 4. ACTUALIZAR UN PROVEEDOR EXISTENTE ---
 router.put('/:id', async (req, res) => {
   const { id } = req.params;
-  const { nombre_prov, Numero_prov } = req.body;
+  const proveedorJson = JSON.stringify(req.body);
 
-  if (!nombre_prov || nombre_prov.trim() === '') {
+  if (!req.body.nombre_prov || req.body.nombre_prov.trim() === '') {
     return res.status(400).json({ error: 'El campo nombre_prov es requerido.' });
   }
 
   try {
     const request = await pool.then(p => p.request());
     request.input('id', sql.SmallInt, id);
-    request.input('nombre_prov', sql.VarChar(100), nombre_prov);
-    request.input('Numero_prov', sql.VarChar(10), Numero_prov);
+    request.input('json', sql.NVarChar(sql.MAX), proveedorJson);
 
-    const result = await request.query(
-      'UPDATE proveedores SET nombre_prov = @nombre_prov, Numero_prov = @Numero_prov OUTPUT Inserted.* WHERE id_prov = @id'
-    );
+    const result = await request.execute('sp_actualizar_proveedor_json');
 
     if (result.recordset.length > 0) {
       res.json(result.recordset[0]);
@@ -88,6 +83,7 @@ router.put('/:id', async (req, res) => {
   }
 });
 
+
 // --- 5. BORRAR UN PROVEEDOR ---
 router.delete('/:id', async (req, res) => {
   const { id } = req.params;
@@ -96,17 +92,26 @@ router.delete('/:id', async (req, res) => {
     const request = await pool.then(p => p.request());
     request.input('id', sql.SmallInt, id);
 
-    const result = await request.query('DELETE FROM proveedores WHERE id_prov = @id');
+    await request.execute('sp_eliminar_proveedor_seguro');
 
-    if (result.rowsAffected[0] > 0) {
-      res.status(204).send();
-    } else {
-      res.status(404).json({ error: 'Proveedor no encontrado para eliminar.' });
-    }
+    res.status(204).send();
   } catch (error) {
+    // Captura error de clave foránea
+    if (
+      error?.number === 50000 || // THROW personalizado
+      error.message.includes('FK_productos_proveedores') || 
+      error.message.includes('conflicted with the REFERENCE constraint')
+    ) {
+      return res.status(409).json({
+        error: 'No se puede eliminar el proveedor porque está asociado a uno o más productos.'
+      });
+    }
+
     console.error(`❌ Error al borrar el proveedor con ID ${id}:`, error.message);
     res.status(500).json({ error: 'Error interno al borrar el proveedor.' });
   }
 });
+
+
 
 export default router;

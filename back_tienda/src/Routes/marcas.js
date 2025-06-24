@@ -36,44 +36,41 @@ router.get('/:id', async (req, res) => {
 
 // --- 3. CREAR UNA NUEVA MARCA ---
 router.post('/', async (req, res) => {
-  const { Nombre_marca } = req.body;
+  const marcaJson = JSON.stringify(req.body);
 
-  if (!Nombre_marca || Nombre_marca.trim() === '') {
+  if (!req.body.Nombre_marca || req.body.Nombre_marca.trim() === '') {
     return res.status(400).json({ error: 'El campo Nombre_marca es requerido.' });
   }
 
   try {
     const request = await pool.then(p => p.request());
-    request.input('Nombre_marca', sql.VarChar(50), Nombre_marca);
+    request.input('json', sql.NVarChar(sql.MAX), marcaJson);
 
-    const result = await request.query(
-      'INSERT INTO marcas (Nombre_marca) OUTPUT Inserted.* VALUES (@Nombre_marca)'
-    );
+    const result = await request.execute('sp_insertar_marca_json');
 
     res.status(201).json(result.recordset[0]);
   } catch (error) {
-    console.error('Error al crear la nueva marca:', error);
+    console.error('❌ Error al crear la nueva marca:', error);
     res.status(500).json({ error: 'Error interno al crear la marca.' });
   }
 });
 
+
 // --- 4. ACTUALIZAR UNA MARCA EXISTENTE ---
 router.put('/:id', async (req, res) => {
   const { id } = req.params;
-  const { Nombre_marca } = req.body;
+  const marcaJson = JSON.stringify(req.body);
 
-  if (!Nombre_marca || Nombre_marca.trim() === '') {
+  if (!req.body.Nombre_marca || req.body.Nombre_marca.trim() === '') {
     return res.status(400).json({ error: 'El campo Nombre_marca es requerido.' });
   }
 
   try {
     const request = await pool.then(p => p.request());
     request.input('id', sql.SmallInt, id);
-    request.input('Nombre_marca', sql.VarChar(50), Nombre_marca);
+    request.input('json', sql.NVarChar(sql.MAX), marcaJson);
 
-    const result = await request.query(
-      'UPDATE marcas SET Nombre_marca = @Nombre_marca OUTPUT Inserted.* WHERE id_marca = @id'
-    );
+    const result = await request.execute('sp_actualizar_marca_json');
 
     if (result.recordset.length > 0) {
       res.json(result.recordset[0]);
@@ -81,10 +78,11 @@ router.put('/:id', async (req, res) => {
       res.status(404).json({ error: 'Marca no encontrada para actualizar.' });
     }
   } catch (error) {
-    console.error(`Error al actualizar la marca con ID ${id}:`, error);
+    console.error(`❌ Error al actualizar la marca con ID ${id}:`, error);
     res.status(500).json({ error: 'Error interno al actualizar la marca.' });
   }
 });
+
 
 // --- 5. BORRAR UNA MARCA ---
 router.delete('/:id', async (req, res) => {
@@ -94,20 +92,23 @@ router.delete('/:id', async (req, res) => {
     const request = await pool.then(p => p.request());
     request.input('id', sql.SmallInt, id);
 
-    const result = await request.query('DELETE FROM marcas WHERE id_marca = @id');
+    await request.execute('sp_eliminar_marca_seguro');
 
-    if (result.rowsAffected[0] > 0) {
-      res.status(204).send();
-    } else {
-      res.status(404).json({ error: 'Marca no encontrada para eliminar.' });
-    }
+    res.status(204).send();
   } catch (error) {
-    console.error(`Error al borrar la marca con ID ${id}:`, error);
+    if (error?.number === 51000 || (error.message && error.message.includes('asociada'))) {
+      return res.status(409).json({
+        error: 'No se puede eliminar la marca porque está asociada a uno o más productos.'
+      });
+    }
+
+    console.error(`❌ Error al borrar la marca con ID ${id}:`, error.message);
     res.status(500).json({
       error: 'Error interno al borrar la marca.',
-      message: 'Es posible que esta marca esté asignada a uno o más productos y no pueda ser eliminada.'
+      message: 'Es posible que esta marca esté asignada a uno o más productos.'
     });
   }
 });
+
 
 export default router;

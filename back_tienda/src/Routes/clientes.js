@@ -36,48 +36,41 @@ router.get('/:id', async (req, res) => {
 
 // --- 3. CREAR UN NUEVO CLIENTE ---
 router.post('/', async (req, res) => {
-  const { nombre_cli, Numero_cli, dir_cli } = req.body;
+  const clienteJson = JSON.stringify(req.body); // recibe el mismo JSON que ya envía el front
 
-  if (!nombre_cli || nombre_cli.trim() === '') {
+  if (!req.body.nombre_cli || req.body.nombre_cli.trim() === '') {
     return res.status(400).json({ error: 'El campo nombre_cli es requerido.' });
   }
 
   try {
     const request = await pool.then(p => p.request());
-    request.input('nombre_cli', sql.VarChar(100), nombre_cli);
-    request.input('Numero_cli', sql.VarChar(100), Numero_cli);
-    request.input('dir_cli', sql.VarChar(100), dir_cli);
+    request.input('json', sql.NVarChar(sql.MAX), clienteJson);
 
-    const result = await request.query(
-      'INSERT INTO clientes (nombre_cli, Numero_cli, dir_cli) OUTPUT Inserted.* VALUES (@nombre_cli, @Numero_cli, @dir_cli)'
-    );
-    
+    const result = await request.execute('sp_insertar_cliente_json');
+
     res.status(201).json(result.recordset[0]);
   } catch (error) {
-    console.error('Error al crear el nuevo cliente:', error);
+    console.error('❌ Error al crear el cliente:', error);
     res.status(500).json({ error: 'Error interno al crear el cliente.' });
   }
 });
 
+
 // --- 4. ACTUALIZAR UN CLIENTE EXISTENTE ---
 router.put('/:id', async (req, res) => {
   const { id } = req.params;
-  const { nombre_cli, Numero_cli, dir_cli } = req.body;
+  const clienteJson = JSON.stringify(req.body);
 
-  if (!nombre_cli || nombre_cli.trim() === '') {
+  if (!req.body.nombre_cli || req.body.nombre_cli.trim() === '') {
     return res.status(400).json({ error: 'El campo nombre_cli es requerido.' });
   }
-  
+
   try {
     const request = await pool.then(p => p.request());
     request.input('id', sql.SmallInt, id);
-    request.input('nombre_cli', sql.VarChar(100), nombre_cli);
-    request.input('Numero_cli', sql.VarChar(100), Numero_cli);
-    request.input('dir_cli', sql.VarChar(100), dir_cli);
-    
-    const result = await request.query(
-      'UPDATE clientes SET nombre_cli = @nombre_cli, Numero_cli = @Numero_cli, dir_cli = @dir_cli OUTPUT Inserted.* WHERE id_cli = @id'
-    );
+    request.input('json', sql.NVarChar(sql.MAX), clienteJson);
+
+    const result = await request.execute('sp_actualizar_cliente_json');
 
     if (result.recordset.length > 0) {
       res.json(result.recordset[0]);
@@ -85,47 +78,37 @@ router.put('/:id', async (req, res) => {
       res.status(404).json({ error: 'Cliente no encontrado para actualizar.' });
     }
   } catch (error) {
-    console.error(`Error al actualizar el cliente con ID ${id}:`, error);
+    console.error(`❌ Error al actualizar cliente con ID ${id}:`, error);
     res.status(500).json({ error: 'Error interno al actualizar el cliente.' });
   }
 });
+
 
 // --- 5. BORRAR UN CLIENTE ---
 router.delete('/:id', async (req, res) => {
   const { id } = req.params;
 
   try {
-    // Paso 1: Verificar si el cliente tiene ventas asociadas
-    const checkRequest = await pool.then(p => p.request());
-    checkRequest.input('id_cli', sql.SmallInt, id);
-    const check = await checkRequest.query(`
-      SELECT COUNT(*) AS cantidad FROM ventas WHERE id_cli_venta = @id_cli
-    `);
+    const request = await pool.then(p => p.request());
+    request.input('id', sql.SmallInt, id);
 
-    if (check.recordset[0].cantidad > 0) {
+    const result = await request.execute('sp_eliminar_cliente_seguro');
+
+    res.status(204).send();
+  } catch (error) {
+    if (error?.number === 51000 || (error.message && error.message.includes('ventas asociadas'))) {
       return res.status(409).json({
         error: 'No se puede eliminar el cliente porque está asociado a una o más ventas.'
       });
     }
 
-    // Paso 2: Eliminar el cliente si no hay conflictos
-    const request = await pool.then(p => p.request());
-    request.input('id', sql.SmallInt, id);
-
-    const result = await request.query('DELETE FROM clientes WHERE id_cli = @id');
-
-    if (result.rowsAffected[0] > 0) {
-      res.status(204).send();
-    } else {
-      res.status(404).json({ error: 'Cliente no encontrado para eliminar.' });
-    }
-  } catch (error) {
     console.error(`❌ Error al borrar el cliente con ID ${id}:`, error.message);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Error interno al borrar el cliente.',
       message: 'Es posible que esté vinculado con otras entidades.'
     });
   }
 });
+
 
 export default router;
