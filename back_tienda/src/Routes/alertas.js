@@ -44,5 +44,18 @@ router.get('/', async (req, res) => {
   }
 });
 
+// --- REBAJAR PRECIOS DE PRODUCTOS POR CADUCAR ---
+router.post('/rebajar-precios', async (req, res) => {
+  try {
+    const request = (await pool).request();
+    await request.execute('sp_rebajar_precio_por_caducar');
+
+    res.json({ message: '✅ Precios actualizados correctamente para productos por caducar.' });
+  } catch (error) {
+    console.error('❌ Error al ejecutar sp_rebajar_precio_por_caducar:', error);
+    res.status(500).json({ error: 'Error al rebajar precios de productos por caducar.' });
+  }
+});
+
 
 export default router;

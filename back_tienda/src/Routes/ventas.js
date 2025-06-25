@@ -3,7 +3,7 @@ import { sql, pool } from '../BD/MySQL.js';
 
 const router = express.Router();
 
-// Buscar productos (por ID o nombre que comiencen con lo escrito)
+// ✅ Buscar productos (por ID o nombre que comiencen con lo escrito) – solo activos
 router.get('/productos/buscar', async (req, res) => {
   const { q } = req.query;
   try {
@@ -12,7 +12,7 @@ router.get('/productos/buscar', async (req, res) => {
     const result = await request.query(`
       SELECT id_prod, nombre_prod, precio_ven_prod
       FROM productos
-      WHERE CAST(id_prod AS VARCHAR) LIKE @query OR nombre_prod LIKE @query
+      WHERE activo = 1 AND (CAST(id_prod AS VARCHAR) LIKE @query OR nombre_prod LIKE @query)
     `);
     res.json(result.recordset);
   } catch (error) {
